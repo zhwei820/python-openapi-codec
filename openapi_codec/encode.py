@@ -163,6 +163,19 @@ def _get_parameters(link, encoding):
                 }
                 if field_type == 'array':
                     schema_property['items'] = {'type': 'string'}
+
+                # ----------------- zw start  ---------------------
+                if hasattr(field, "schema") and hasattr(field.schema, "properties"):
+                    schema_property['properties'] = {k:vars(v) for k,v in dict(field.schema.properties).items()}
+                    for k,v in schema_property['properties'].items():
+                        pro = {}
+                        for kk, vv in v.items():
+                            if vv:
+                                pro[kk] = vv
+                        pro['type'] = "string"
+                        schema_property['properties'][k] = pro
+                # ----------------- zw end  ---------------------
+
                 properties[field.name] = schema_property
                 if field.required:
                     required.append(field.name)
