@@ -9,22 +9,22 @@ def generate_swagger_object(document):
     Generates root of the Swagger spec.
     """
     parsed_url = urlparse.urlparse(document.url)
-
+    
     swagger = OrderedDict()
-
+    
     swagger['swagger'] = '2.0'
     swagger['info'] = OrderedDict()
     swagger['info']['title'] = document.title
     swagger['info']['description'] = document.description
     swagger['info']['version'] = ''  # Required by the spec
-
+    
     if parsed_url.netloc:
         swagger['host'] = parsed_url.netloc
     if parsed_url.scheme:
         swagger['schemes'] = [parsed_url.scheme]
-
+    
     swagger['paths'] = _get_paths_object(document)
-
+    
     return swagger
 
 
@@ -49,31 +49,31 @@ def _get_links(document):
             operation_id = keys[0]
             tags = []
         links.append((operation_id, link, tags))
-
+    
     # Determine if the operation ids each have unique names or not.
     operation_ids = [item[0] for item in links]
     unique = len(set(operation_ids)) == len(links)
-
+    
     # If the operation ids are not unique, then prefix them with the tag.
     if not unique:
         return [_add_tag_prefix(item) for item in links]
-
+    
     return links
 
 
 def _get_paths_object(document):
     paths = OrderedDict()
-
+    
     links = _get_links(document)
-
+    
     for operation_id, link, tags in links:
         if link.url not in paths:
             paths[link.url] = OrderedDict()
-
+        
         method = get_method(link)
         operation = _get_operation(operation_id, link, tags)
         paths[link.url].update({method: operation})
-
+    
     return paths
 
 
@@ -81,13 +81,13 @@ def _get_operation(operation_id, link, tags):
     encoding = get_encoding(link)
     description = link.description.strip()
     summary = description.splitlines()[0] if description else None
-
+    
     operation = {
         'operationId': operation_id,
         'responses': _get_responses(link),
         'parameters': _get_parameters(link, encoding)
     }
-
+    
     if description:
         operation['description'] = description
     if summary:
@@ -103,10 +103,10 @@ def _get_field_description(field):
     if getattr(field, 'description', None) is not None:
         # Deprecated
         return field.description
-
+    
     if field.schema is None:
         return ''
-
+    
     return field.schema.description
 
 
@@ -114,10 +114,10 @@ def _get_field_type(field):
     if getattr(field, 'type', None) is not None:
         # Deprecated
         return field.type
-
+    
     if field.schema is None:
         return 'string'
-
+    
     return {
         coreschema.String: 'string',
         coreschema.Integer: 'integer',
@@ -135,11 +135,12 @@ def _get_parameters(link, encoding):
     parameters = []
     properties = {}
     required = []
-
+    
     for field in link.fields:
         location = get_location(link, field)
         field_description = _get_field_description(field)
         field_type = _get_field_type(field)
+
         if location == 'form':
             if encoding in ('multipart/form-data', 'application/x-www-form-urlencoded'):
                 # 'formData' in swagger MUST be one of these media types.
@@ -156,24 +157,47 @@ def _get_parameters(link, encoding):
             else:
                 # Expand coreapi fields with location='form' into a single swagger
                 # parameter, with a schema containing multiple properties.
-
+                
                 schema_property = {
                     'description': field_description,
                     'type': field_type,
                 }
                 if field_type == 'array':
                     schema_property['items'] = {'type': 'string'}
-
+                
                 # ----------------- zw start  ---------------------
                 if hasattr(field, "schema") and hasattr(field.schema, "properties"):
-                    schema_property['properties'] = {k:vars(v) for k,v in dict(field.schema.properties).items()}
-                    for k,v in schema_property['properties'].items():
+                    schema_property['properties'] = {k: vars(v) for k, v in dict(field.schema.properties).items()}
+                    for k, v in schema_property['properties'].items():
                         pro = {}
                         for kk, vv in v.items():
                             if vv:
                                 pro[kk] = vv
                         pro['type'] = "string"
                         schema_property['properties'][k] = pro
+                if hasattr(field, "schema") and hasattr(field.schema, "items") and hasattr(field.schema.items,
+                                                                                           "properties"):
+                    schema_property = {
+                        'type': 'array',
+                        'items': {
+                            'type': 'object',
+                            'properties': {}
+                        }}
+                    schema_property['items']['properties'] = {k: vars(v) for k, v in dict(field.schema.items.properties).items()}
+                    for k, v in schema_property['items']['properties'].items():
+                        pro = {}
+                        pro['type'] = "string"
+                        for kk, vv in v.items():
+                            if vv:
+                                pro[kk] = vv
+                            if kk == 'items':
+                                vv = {
+                                'type': 'array',
+                                'items': {
+                                    'type': 'string',
+                                }}
+                                pro = vv
+                        schema_property['items']['properties'][k] = pro
                 # ----------------- zw end  ---------------------
 
                 properties[field.name] = schema_property
@@ -204,7 +228,7 @@ def _get_parameters(link, encoding):
             if field_type == 'array':
                 parameter['items'] = {'type': 'string'}
             parameters.append(parameter)
-
+    
     if properties:
         parameter = {
             'name': 'data',

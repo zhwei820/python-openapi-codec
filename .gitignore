@@ -8,3 +8,5 @@ site/
 __pycache__
 .cache
 .coverage
+.vscode
+build
